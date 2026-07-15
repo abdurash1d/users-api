@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: users
+    ports:
+      - "${DB_PORT:-5433}:5432"  # 5433 by default to avoid clashing with a local PostgreSQL on 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    # Migrations run inline on startup - fine for a single api replica; use a one-shot migrate
+    # service if scaling.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment: &app_env
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/users
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: celery -A app.core.celery_app worker --loglevel=info
+    environment: *app_env
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: .
+    command: celery -A app.core.celery_app beat --loglevel=info
+    environment: *app_env
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
