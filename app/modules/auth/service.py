@@ -1,3 +1,5 @@
+import logging
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -14,10 +16,19 @@ from app.modules.auth.schemas import SignupRequest
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 
+logger = logging.getLogger(__name__)
+
+# Computed once at import; used so unknown-email logins cost the same as a real
+# argon2 verification (prevents timing-based account enumeration).
+_DUMMY_PASSWORD_HASH = security.hash_password("dummy-password-for-timing-equalization")
+
 
 async def signup(repo: UserRepository, data: SignupRequest, email_sender: EmailSender) -> User:
     email = data.email.lower()
     if await repo.get_by_email(email) is not None:
+        # Accepted trade-off: a 409 here reveals that an email is registered. The spec
+        # explicitly requires email-uniqueness feedback at signup; login remains
+        # enumeration-safe.
         raise EmailAlreadyExistsError
 
     code = security.generate_verification_code()
@@ -32,9 +43,13 @@ async def signup(repo: UserRepository, data: SignupRequest, email_sender: EmailS
     )
     repo.add(user)
     await repo.commit()
-    # SIMPLIFICATION: sent synchronously after commit; with more time this would
-    # be dispatched to a Celery queue with retries (and an outbox for atomicity).
-    email_sender.send_verification_code(email, code)
+    # SIMPLIFICATION: sent synchronously after commit; with more time this would be
+    # dispatched to a Celery queue with retries (and an outbox for atomicity).
+    # A delivery failure must not fail the request - the account is already created.
+    try:
+        email_sender.send_verification_code(email, code)
+    except Exception:  # noqa: BLE001 - never fail signup on delivery errors
+        logger.exception("Failed to send verification code to %s", email)
     return user
 
 
@@ -45,7 +60,9 @@ async def verify(repo: UserRepository, email: str, code: str) -> User:
     expires_at = user.verification_code_expires_at
     if expires_at is None or expires_at < datetime.now(UTC):
         raise InvalidVerificationCodeError
-    if security.hash_verification_code(code) != user.verification_code_hash:
+    if not secrets.compare_digest(
+        security.hash_verification_code(code), user.verification_code_hash
+    ):
         raise InvalidVerificationCodeError
 
     user.is_verified = True
@@ -57,8 +74,10 @@ async def verify(repo: UserRepository, email: str, code: str) -> User:
 
 async def login(repo: UserRepository, email: str, password: str) -> tuple[str, str]:
     user = await repo.get_by_email(email.lower())
+    hashed = user.hashed_password if user is not None else _DUMMY_PASSWORD_HASH
+    password_ok = security.verify_password(password, hashed)
     # Same error for unknown email and wrong password to avoid account enumeration.
-    if user is None or not security.verify_password(password, user.hashed_password):
+    if user is None or not password_ok:
         raise InvalidCredentialsError
     if not user.is_verified:
         raise EmailNotVerifiedError
@@ -71,9 +90,10 @@ async def login(repo: UserRepository, email: str, password: str) -> tuple[str, s
 async def refresh(repo: UserRepository, refresh_token: str) -> str:
     try:
         payload = security.decode_token(refresh_token, expected_type="refresh")
-    except security.TokenError as exc:
+        user_id = uuid.UUID(payload["sub"])
+    except (security.TokenError, KeyError, ValueError) as exc:
         raise InvalidCredentialsError from exc
-    user = await repo.get_by_id(uuid.UUID(payload["sub"]))
+    user = await repo.get_by_id(user_id)
     if user is None:
         raise InvalidCredentialsError
     return security.create_access_token(user.id, user.role)

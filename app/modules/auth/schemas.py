@@ -15,7 +15,8 @@ class VerifyRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    # No min_length: login must not leak the password policy; any string is checked.
+    password: str = Field(max_length=128)
 
 
 class RefreshRequest(BaseModel):

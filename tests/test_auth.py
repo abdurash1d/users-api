@@ -1,5 +1,9 @@
-from httpx import AsyncClient
+from datetime import UTC, datetime, timedelta
 
+from httpx import AsyncClient
+from sqlalchemy import update
+
+from app.modules.users.models import User
 from tests.conftest import RecordingEmailSender
 
 SIGNUP = {"email": "Alice@Example.com", "password": "password123", "first_name": "Alice"}
@@ -72,4 +76,30 @@ async def test_refresh_rejects_access_token(client, email_sender) -> None:
         "/auth/login", json={"email": "alice@example.com", "password": "password123"}
     )
     resp = await client.post("/auth/refresh", json={"refresh_token": resp.json()["access_token"]})
+    assert resp.status_code == 401
+
+
+async def test_verify_expired_code(client, email_sender, db_session) -> None:
+    await client.post("/auth/signup", json=SIGNUP)
+    code = email_sender.codes["alice@example.com"]
+    await db_session.execute(
+        update(User)
+        .where(User.email == "alice@example.com")
+        .values(verification_code_expires_at=datetime.now(UTC) - timedelta(minutes=1))
+    )
+    await db_session.commit()
+    resp = await client.post("/auth/verify", json={"email": "alice@example.com", "code": code})
+    assert resp.status_code == 400
+
+
+async def test_verify_already_verified_user(client, email_sender) -> None:
+    await client.post("/auth/signup", json=SIGNUP)
+    code = email_sender.codes["alice@example.com"]
+    await client.post("/auth/verify", json={"email": "alice@example.com", "code": code})
+    resp = await client.post("/auth/verify", json={"email": "alice@example.com", "code": code})
+    assert resp.status_code == 400
+
+
+async def test_refresh_garbage_token(client) -> None:
+    resp = await client.post("/auth/refresh", json={"refresh_token": "not-a-jwt"})
     assert resp.status_code == 401
