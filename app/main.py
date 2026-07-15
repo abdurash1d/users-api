@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.exceptions import DomainError
 from app.modules.auth.router import router as auth_router
+from app.modules.users.router import router as users_router
 
 app = FastAPI(
     title="Users API",
@@ -17,6 +18,7 @@ async def domain_error_handler(request: Request, exc: DomainError) -> JSONRespon
 
 
 app.include_router(auth_router)
+app.include_router(users_router)
 
 
 @app.get("/health", summary="Health check", description="Liveness probe endpoint.")
