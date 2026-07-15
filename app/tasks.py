@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.celery_app import celery_app
 from app.core.config import settings
@@ -26,15 +26,21 @@ async def purge_unverified_users(session: AsyncSession) -> int:
 def delete_expired_unverified_users() -> int:
     """Celery beat entrypoint (hourly). See purge_unverified_users for the logic.
 
-    SIMPLIFICATION: asyncio.run per task invocation creates a fresh event loop
-    and engine connections each run; fine at this scale. With more time, use a
-    sync engine here or a shared loop per worker process.
+    A fresh engine is created and disposed per invocation: asyncio.run() creates
+    a new event loop each time, and pooled asyncpg connections must never be
+    reused across loops (doing so crashes on the second run in a worker).
+    SIMPLIFICATION: with more time, set up one persistent event loop and engine
+    per worker process via the worker_process_init signal instead of paying
+    engine setup/teardown on every run.
     """
 
     async def _run() -> int:
-        from app.core.database import async_session_factory
-
-        async with async_session_factory() as session:
-            return await purge_unverified_users(session)
+        engine = create_async_engine(settings.database_url)
+        try:
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with factory() as session:
+                return await purge_unverified_users(session)
+        finally:
+            await engine.dispose()
 
     return asyncio.run(_run())

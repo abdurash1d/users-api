@@ -1,10 +1,14 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.core.config import settings
 from app.modules.users.models import User
-from app.tasks import purge_unverified_users
+from app.tasks import delete_expired_unverified_users, purge_unverified_users
+from tests.conftest import TEST_DATABASE_URL
 
 
 async def test_purge_deletes_only_expired_unverified(db_session: AsyncSession) -> None:
@@ -27,3 +31,14 @@ async def test_purge_deletes_only_expired_unverified(db_session: AsyncSession) -
 
     remaining = (await db_session.execute(select(User.email))).scalars().all()
     assert sorted(remaining) == ["fresh@example.com", "ok@example.com"]
+
+
+async def test_celery_entrypoint_survives_repeat_invocations(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: run 2 must not reuse pooled connections from run 1's event loop."""
+    monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
+    first = await asyncio.to_thread(delete_expired_unverified_users)
+    second = await asyncio.to_thread(delete_expired_unverified_users)
+    assert first == 0
+    assert second == 0
