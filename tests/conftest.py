@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.database import Base, get_session
+from app.core.email import get_email_sender
 from app.main import app
 from app.modules.users import models  # noqa: F401  (register tables on Base.metadata)
 
@@ -46,3 +47,20 @@ async def client(engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+class RecordingEmailSender:
+    """Test double that captures verification codes instead of sending them."""
+
+    def __init__(self) -> None:
+        self.codes: dict[str, str] = {}
+
+    def send_verification_code(self, email: str, code: str) -> None:
+        self.codes[email] = code
+
+
+@pytest.fixture
+def email_sender() -> RecordingEmailSender:
+    sender = RecordingEmailSender()
+    app.dependency_overrides[get_email_sender] = lambda: sender
+    return sender
