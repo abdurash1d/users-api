@@ -1,0 +1,75 @@
+from httpx import AsyncClient
+
+from tests.conftest import RecordingEmailSender
+
+SIGNUP = {"email": "Alice@Example.com", "password": "password123", "first_name": "Alice"}
+
+
+async def signup_and_verify(client: AsyncClient, sender: RecordingEmailSender) -> None:
+    await client.post("/auth/signup", json=SIGNUP)
+    code = sender.codes["alice@example.com"]
+    resp = await client.post("/auth/verify", json={"email": "alice@example.com", "code": code})
+    assert resp.status_code == 200
+
+
+async def test_signup_creates_unverified_user(client, email_sender) -> None:
+    resp = await client.post("/auth/signup", json=SIGNUP)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["email"] == "alice@example.com"  # normalized to lowercase
+    assert body["is_verified"] is False
+    assert body["role"] == "user"
+    assert "hashed_password" not in body
+    assert "alice@example.com" in email_sender.codes
+
+
+async def test_signup_duplicate_email_conflict(client, email_sender) -> None:
+    await client.post("/auth/signup", json=SIGNUP)
+    resp = await client.post("/auth/signup", json={**SIGNUP, "email": "ALICE@example.com"})
+    assert resp.status_code == 409
+
+
+async def test_verify_with_wrong_code(client, email_sender) -> None:
+    await client.post("/auth/signup", json=SIGNUP)
+    resp = await client.post("/auth/verify", json={"email": "alice@example.com", "code": "000000"})
+    assert resp.status_code == 400
+
+
+async def test_login_before_verification_forbidden(client, email_sender) -> None:
+    await client.post("/auth/signup", json=SIGNUP)
+    resp = await client.post(
+        "/auth/login", json={"email": "alice@example.com", "password": "password123"}
+    )
+    assert resp.status_code == 403
+
+
+async def test_full_flow_signup_verify_login_refresh(client, email_sender) -> None:
+    await signup_and_verify(client, email_sender)
+
+    resp = await client.post(
+        "/auth/login", json={"email": "alice@example.com", "password": "password123"}
+    )
+    assert resp.status_code == 200
+    tokens = resp.json()
+    assert tokens["token_type"] == "bearer"
+
+    resp = await client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
+
+
+async def test_login_wrong_password(client, email_sender) -> None:
+    await signup_and_verify(client, email_sender)
+    resp = await client.post(
+        "/auth/login", json={"email": "alice@example.com", "password": "wrong-password"}
+    )
+    assert resp.status_code == 401
+
+
+async def test_refresh_rejects_access_token(client, email_sender) -> None:
+    await signup_and_verify(client, email_sender)
+    resp = await client.post(
+        "/auth/login", json={"email": "alice@example.com", "password": "password123"}
+    )
+    resp = await client.post("/auth/refresh", json={"refresh_token": resp.json()["access_token"]})
+    assert resp.status_code == 401
