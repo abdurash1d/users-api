@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
         sa.Column("first_name", sa.String(length=100), nullable=True),
         sa.Column("last_name", sa.String(length=100), nullable=True),
-        sa.Column("role", sa.Enum("USER", "ADMIN", name="user_role"), nullable=False),
+        sa.Column("role", sa.Enum("user", "admin", name="user_role"), nullable=False),
         sa.Column("is_verified", sa.Boolean(), nullable=False),
         sa.Column("verification_code_hash", sa.String(length=64), nullable=True),
         sa.Column("verification_code_expires_at", sa.DateTime(timezone=True), nullable=True),

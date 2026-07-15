@@ -27,7 +27,10 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     first_name: Mapped[str | None] = mapped_column(String(100))
     last_name: Mapped[str | None] = mapped_column(String(100))
-    role: Mapped[Role] = mapped_column(Enum(Role, name="user_role"), default=Role.USER)
+    role: Mapped[Role] = mapped_column(
+        Enum(Role, name="user_role", values_callable=lambda e: [m.value for m in e]),
+        default=Role.USER,
+    )
     is_verified: Mapped[bool] = mapped_column(default=False)
     verification_code_hash: Mapped[str | None] = mapped_column(String(64))
     verification_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
