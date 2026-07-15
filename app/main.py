@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
 from app.core.exceptions import DomainError
 from app.modules.auth.router import router as auth_router
 from app.modules.users.router import router as users_router
 
 app = FastAPI(
-    title="Users API",
+    title=settings.app_name,
     description="User management module: registration, JWT auth, verification, roles.",
     version="0.1.0",
 )

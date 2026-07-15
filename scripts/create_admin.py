@@ -1,7 +1,13 @@
-"""Bootstrap an admin user: uv run python -m scripts.create_admin <email> <password>."""
+"""Bootstrap an admin user: uv run python -m scripts.create_admin <email> <password>.
+
+Creates a verified admin, or promotes an existing user to admin and resets their
+password.
+"""
 
 import asyncio
 import sys
+
+from sqlalchemy.exc import IntegrityError
 
 from app.core import security
 from app.core.database import async_session_factory
@@ -24,6 +30,7 @@ async def create_admin(email: str, password: str) -> None:
         else:
             user.role = Role.ADMIN
             user.is_verified = True
+            user.hashed_password = security.hash_password(password)
         await repo.commit()
         print(f"Admin ready: {user.email}")
 
@@ -38,3 +45,5 @@ if __name__ == "__main__":
             f"Could not reach the database ({exc}). "
             "Is the db service running (docker compose up -d db)?"
         )
+    except IntegrityError:
+        sys.exit("A concurrent invocation already created this user - re-run to promote it.")

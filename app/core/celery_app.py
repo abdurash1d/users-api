@@ -3,8 +3,10 @@ from celery.schedules import crontab
 
 from app.core.config import settings
 
-celery_app = Celery("users_api", broker=settings.redis_url, backend=settings.redis_url)
+celery_app = Celery("users_api", broker=settings.redis_url)
 celery_app.conf.timezone = "UTC"
+# Beat tasks are fire-and-forget; don't write results to Redis.
+celery_app.conf.task_ignore_result = True
 
 celery_app.conf.beat_schedule = {
     "purge-unverified-users": {

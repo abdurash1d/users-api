@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import Sequence
 
@@ -45,7 +46,8 @@ async def update_user(
     if last_name is not None:
         user.last_name = last_name
     if password is not None:
-        user.hashed_password = security.hash_password(password)
+        # argon2 is CPU-bound (~30ms); run in a thread so it never blocks the event loop.
+        user.hashed_password = await asyncio.to_thread(security.hash_password, password)
     if role is not None:
         user.role = role
     if is_verified is not None:

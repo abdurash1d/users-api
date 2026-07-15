@@ -17,12 +17,14 @@ class UserRepository:
         return await self._session.get(User, user_id)
 
     async def get_by_email(self, email: str) -> User | None:
+        # Emails are stored lowercased; normalize lookups so no caller can miss it.
+        email = email.lower()
         result = await self._session.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
     async def list(self, limit: int, offset: int) -> Sequence[User]:
         result = await self._session.execute(
-            select(User).order_by(User.created_at).limit(limit).offset(offset)
+            select(User).order_by(User.created_at, User.id).limit(limit).offset(offset)
         )
         return result.scalars().all()
 

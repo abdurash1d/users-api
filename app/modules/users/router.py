@@ -1,23 +1,14 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query, status
 
-from app.core.database import get_session
 from app.modules.auth.dependencies import AdminUser, CurrentUser
 from app.modules.users import service
-from app.modules.users.repository import UserRepository
+from app.modules.users.dependencies import RepoDep
 from app.modules.users.schemas import UserRead, UserUpdate
 
 router = APIRouter(tags=["users"])
-
-
-def get_repo(session: Annotated[AsyncSession, Depends(get_session)]) -> UserRepository:
-    return UserRepository(session)
-
-
-RepoDep = Annotated[UserRepository, Depends(get_repo)]
 
 
 @router.get(

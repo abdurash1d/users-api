@@ -1,9 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
 from app.core.email import EmailSender, get_email_sender
 from app.modules.auth import service
 from app.modules.auth.schemas import (
@@ -14,19 +12,11 @@ from app.modules.auth.schemas import (
     TokenPair,
     VerifyRequest,
 )
-from app.modules.users.repository import UserRepository
+from app.modules.users.dependencies import RepoDep
 from app.modules.users.schemas import UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-
-def get_repo(session: SessionDep) -> UserRepository:
-    return UserRepository(session)
-
-
-RepoDep = Annotated[UserRepository, Depends(get_repo)]
 EmailSenderDep = Annotated[EmailSender, Depends(get_email_sender)]
 
 

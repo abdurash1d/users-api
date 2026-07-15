@@ -103,3 +103,19 @@ async def test_verify_already_verified_user(client, email_sender) -> None:
 async def test_refresh_garbage_token(client) -> None:
     resp = await client.post("/auth/refresh", json={"refresh_token": "not-a-jwt"})
     assert resp.status_code == 401
+
+
+async def test_refresh_rejected_after_deverification(client, email_sender, db_session) -> None:
+    await signup_and_verify(client, email_sender)
+    resp = await client.post(
+        "/auth/login", json={"email": "alice@example.com", "password": "password123"}
+    )
+    refresh_token = resp.json()["refresh_token"]
+
+    await db_session.execute(
+        update(User).where(User.email == "alice@example.com").values(is_verified=False)
+    )
+    await db_session.commit()
+
+    resp = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    assert resp.status_code == 403

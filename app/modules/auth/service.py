@@ -1,7 +1,10 @@
+import asyncio
 import logging
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
+
+from sqlalchemy.exc import IntegrityError
 
 from app.core import security
 from app.core.config import settings
@@ -32,9 +35,11 @@ async def signup(repo: UserRepository, data: SignupRequest, email_sender: EmailS
         raise EmailAlreadyExistsError
 
     code = security.generate_verification_code()
+    # argon2 is CPU-bound (~30ms); run in a thread so it never blocks the event loop.
+    hashed_password = await asyncio.to_thread(security.hash_password, data.password)
     user = User(
         email=email,
-        hashed_password=security.hash_password(data.password),
+        hashed_password=hashed_password,
         first_name=data.first_name,
         last_name=data.last_name,
         verification_code_hash=security.hash_verification_code(code),
@@ -42,7 +47,12 @@ async def signup(repo: UserRepository, data: SignupRequest, email_sender: EmailS
         + timedelta(minutes=settings.verification_code_ttl_minutes),
     )
     repo.add(user)
-    await repo.commit()
+    try:
+        await repo.commit()
+    except IntegrityError as exc:
+        # Concurrent signup with the same email can pass the pre-check above;
+        # the unique index on users.email is the real guarantee.
+        raise EmailAlreadyExistsError from exc
     # SIMPLIFICATION: sent synchronously after commit; with more time this would be
     # dispatched to a Celery queue with retries (and an outbox for atomicity).
     # A delivery failure must not fail the request - the account is already created.
@@ -54,7 +64,7 @@ async def signup(repo: UserRepository, data: SignupRequest, email_sender: EmailS
 
 
 async def verify(repo: UserRepository, email: str, code: str) -> User:
-    user = await repo.get_by_email(email.lower())
+    user = await repo.get_by_email(email)
     if user is None or user.is_verified or user.verification_code_hash is None:
         raise InvalidVerificationCodeError
     expires_at = user.verification_code_expires_at
@@ -73,9 +83,9 @@ async def verify(repo: UserRepository, email: str, code: str) -> User:
 
 
 async def login(repo: UserRepository, email: str, password: str) -> tuple[str, str]:
-    user = await repo.get_by_email(email.lower())
+    user = await repo.get_by_email(email)
     hashed = user.hashed_password if user is not None else _DUMMY_PASSWORD_HASH
-    password_ok = security.verify_password(password, hashed)
+    password_ok = await asyncio.to_thread(security.verify_password, password, hashed)
     # Same error for unknown email and wrong password to avoid account enumeration.
     if user is None or not password_ok:
         raise InvalidCredentialsError
@@ -96,4 +106,7 @@ async def refresh(repo: UserRepository, refresh_token: str) -> str:
     user = await repo.get_by_id(user_id)
     if user is None:
         raise InvalidCredentialsError
+    if not user.is_verified:
+        # A de-verified/suspended account must not keep minting access tokens.
+        raise EmailNotVerifiedError
     return security.create_access_token(user.id, user.role)
