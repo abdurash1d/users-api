@@ -121,7 +121,7 @@ app/
       router.py service.py schemas.py dependencies.py
     users/         # profile, admin listing, update, delete
       router.py service.py repository.py models.py schemas.py
-  tasks.py         # purge_unverified_users (Celery beat task)
+  tasks.py         # cleanup logic + Celery beat entrypoint
 scripts/
   create_admin.py  # bootstraps/promotes an admin user
 alembic/           # schema migrations
