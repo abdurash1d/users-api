@@ -31,4 +31,10 @@ async def create_admin(email: str, password: str) -> None:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         sys.exit("Usage: python -m scripts.create_admin <email> <password>")
-    asyncio.run(create_admin(sys.argv[1], sys.argv[2]))
+    try:
+        asyncio.run(create_admin(sys.argv[1], sys.argv[2]))
+    except OSError as exc:
+        sys.exit(
+            f"Could not reach the database ({exc}). "
+            "Is the db service running (docker compose up -d db)?"
+        )

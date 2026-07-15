@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 
 WORKDIR /srv/app
 
@@ -11,6 +11,9 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 RUN uv sync --frozen --no-dev
+
+RUN useradd --create-home app && chown -R app /srv/app
+USER app
 
 ENV PATH="/srv/app/.venv/bin:$PATH"
 
