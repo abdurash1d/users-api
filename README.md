@@ -1,5 +1,7 @@
 # Users API
 
+[![CI](https://github.com/abdurash1d/users-api/actions/workflows/ci.yml/badge.svg)](https://github.com/abdurash1d/users-api/actions/workflows/ci.yml)
+
 A user management module built as an extensible modular monolith on FastAPI:
 registration, JWT authentication, email verification, roles (user/admin), and
 automatic cleanup of unverified accounts. It exposes a clean HTTP API with
