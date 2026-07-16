@@ -22,9 +22,18 @@ Redis, and a Celery worker/beat pair for background cleanup).
 cp .env.example .env
 ```
 
-Edit `.env` and set a real `JWT_SECRET_KEY` (the default is only for local
-convenience). If ports `8000` or `5433` are already taken on your machine,
-override `API_PORT` / `DB_PORT` in `.env`.
+Set `USERS_API_JWT_SECRET_KEY` in `.env` to a random value of at least 32
+characters. The application intentionally has no default signing key and
+refuses to start when the key is missing or too short. Generate one with:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+If ports `8000` or `5433` are already taken on your machine, override
+`API_PORT` / `DB_PORT` in `.env`. Application settings use the
+`USERS_API_` prefix so unrelated host variables such as `DEBUG` cannot alter
+the service configuration.
 
 ```bash
 docker compose up -d --build
@@ -190,10 +199,6 @@ trade-off) in the code, with what a production version would do instead:
   with delivery failures caught and logged (never failing signup). With more
   time: dispatch through a Celery queue with retries and an outbox table for
   atomicity with the commit.
-- **Default JWT secret** (`app/core/config.py`) — `jwt_secret_key` has a
-  hardcoded fallback so dev/tests run without a `.env` file. With more time:
-  fail hard at startup if the default is detected outside of a `debug`/test
-  environment.
 - **Plain `String` email column, code on the user row**
   (`app/modules/users/models.py`) — email uniqueness relies on
   case-normalization in the service layer rather than a case-insensitive

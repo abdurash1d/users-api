@@ -29,6 +29,7 @@ async def update_user(
     password: str | None,
     role: Role | None,
     is_verified: bool | None,
+    fields_set: set[str],
 ) -> User:
     """Partial update. Users may edit their own profile; admins may edit anyone.
 
@@ -37,13 +38,13 @@ async def update_user(
     is_admin = actor.role == Role.ADMIN
     if not is_admin and actor.id != user_id:
         raise PermissionDeniedError
-    if not is_admin and (role is not None or is_verified is not None):
+    if not is_admin and not fields_set.isdisjoint({"role", "is_verified"}):
         raise PermissionDeniedError
 
     user = await get_user(repo, user_id)
-    if first_name is not None:
+    if "first_name" in fields_set:
         user.first_name = first_name
-    if last_name is not None:
+    if "last_name" in fields_set:
         user.last_name = last_name
     if password is not None:
         # argon2 is CPU-bound (~30ms); run in a thread so it never blocks the event loop.

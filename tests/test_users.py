@@ -1,6 +1,7 @@
 import uuid
 
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
@@ -72,6 +73,21 @@ async def test_patch_self_allowed(client: AsyncClient, db_session: AsyncSession)
     assert resp.json()["first_name"] == "New"
 
 
+async def test_patch_explicit_null_clears_optional_name(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await make_user(db_session, "u@example.com")
+    user.first_name = "Existing"
+    await db_session.commit()
+
+    resp = await client.patch(
+        f"/users/{user.id}", headers=auth_header(user), json={"first_name": None}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["first_name"] is None
+
+
 async def test_patch_other_user_forbidden(client: AsyncClient, db_session: AsyncSession) -> None:
     user = await make_user(db_session, "u@example.com")
     other = await make_user(db_session, "o@example.com")
@@ -107,4 +123,17 @@ async def test_delete_admin_only(client: AsyncClient, db_session: AsyncSession) 
 
 async def test_expired_or_garbage_token_unauthorized(client: AsyncClient) -> None:
     resp = await client.get("/me", headers={"Authorization": "Bearer garbage"})
+    assert resp.status_code == 401
+
+
+async def test_deverified_user_access_token_is_rejected(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await make_user(db_session, "u@example.com")
+    headers = auth_header(user)
+    await db_session.execute(update(User).where(User.id == user.id).values(is_verified=False))
+    await db_session.commit()
+
+    resp = await client.get("/me", headers=headers)
+
     assert resp.status_code == 401

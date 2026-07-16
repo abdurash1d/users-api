@@ -36,6 +36,8 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
+# Test configuration must set the signing key before importing the application.
+"tests/conftest.py" = ["E402"]
 # Role must inherit `str` (not enum.StrEnum) for SQLAlchemy's Enum(..) column type support.
 "app/modules/users/models.py" = ["UP042"]
 # Alembic-generated files: imports after `config = context.config`, legacy

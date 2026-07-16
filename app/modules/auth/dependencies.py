@@ -31,7 +31,7 @@ async def get_current_user(
     except (security.TokenError, KeyError, ValueError):
         raise unauthorized from None
     user = await UserRepository(session).get_by_id(user_id)
-    if user is None:
+    if user is None or not user.is_verified:
         raise unauthorized
     return user
 

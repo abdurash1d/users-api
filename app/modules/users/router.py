@@ -66,6 +66,7 @@ async def update_user(
         password=data.password,
         role=data.role,
         is_verified=data.is_verified,
+        fields_set=data.model_fields_set,
     )
     return UserRead.model_validate(user)
 
