@@ -30,9 +30,9 @@ services:
     # service if scaling.
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment: &app_env
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/users
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      USERS_API_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/users
+      USERS_API_REDIS_URL: redis://redis:6379/0
+      USERS_API_JWT_SECRET_KEY: ${USERS_API_JWT_SECRET_KEY:?Set a random JWT signing key of at least 32 characters}
     ports:
       - "${API_PORT:-8000}:8000"
     restart: unless-stopped

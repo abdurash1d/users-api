@@ -1,6 +1,9 @@
 import os
 from collections.abc import AsyncIterator
 
+# Tests must never depend on a developer's local signing key.
+os.environ.setdefault("USERS_API_JWT_SECRET_KEY", "tests-only-signing-key-at-least-32-bytes")
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (

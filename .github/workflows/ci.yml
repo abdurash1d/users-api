@@ -33,8 +33,9 @@ jobs:
 
     env:
       # Single source of truth for the CI database. conftest.py reads
-      # TEST_DATABASE_URL; alembic reads DATABASE_URL (app.core.config).
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/users_test
+      # TEST_DATABASE_URL; alembic reads USERS_API_DATABASE_URL (app.core.config).
+      USERS_API_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/users_test
+      USERS_API_JWT_SECRET_KEY: tests-only-signing-key-at-least-32-bytes
       TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/users_test
 
     services:
