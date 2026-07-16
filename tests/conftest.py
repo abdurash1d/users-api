@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncIterator
 
 import pytest
@@ -14,7 +15,11 @@ from app.core.email import get_email_sender
 from app.main import app
 from app.modules.users import models  # noqa: F401  (register tables on Base.metadata)
 
-TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5433/users_test"
+# Overridable so CI (standard port 5432) and local dev (5433, to avoid clashing
+# with a local PostgreSQL — see docker-compose.yml) can use different databases.
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5433/users_test"
+)
 
 
 @pytest.fixture

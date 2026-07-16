@@ -5,9 +5,37 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    # No database needed: runs immediately and fails fast, in parallel with test.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          # Keep in sync with the python:3.12 base image in Dockerfile.
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
   test:
     runs-on: ubuntu-latest
+
+    env:
+      # Single source of truth for the CI database. conftest.py reads
+      # TEST_DATABASE_URL; alembic reads DATABASE_URL (app.core.config).
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/users_test
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/users_test
 
     services:
       postgres:
@@ -16,25 +44,33 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: users_test
         ports:
-          # Tests connect to localhost:5433 (see tests/conftest.py).
-          - "5433:5432"
+          - "5432:5432"
         options: >-
-          --health-cmd "pg_isready -U postgres"
+          --health-cmd "pg_isready -U postgres -h 127.0.0.1"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+        # -h 127.0.0.1 forces a TCP probe: the image's initdb-phase bootstrap
+        # server listens only on the unix socket, so it can't answer early and
+        # mark the service healthy before the real server is up.
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Lint
-        run: uv run ruff check .
+      - name: Check migrations match models
+        # Fails if migrations don't apply cleanly or if the migrated schema
+        # has drifted from the SQLAlchemy models (alembic check).
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
 
       - name: Tests
         run: uv run pytest -q
